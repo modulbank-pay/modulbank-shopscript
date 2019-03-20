@@ -1,0 +1,21 @@
+<form id="paymentForm" class="modulbank-form" action="{$form_url}" method="post" target="_top">
+    {foreach from=$form_fields key=name item=value}
+    <input type="hidden" name="{$name}" value="{$value|escape}" />
+    {/foreach}
+
+    <div class="pay-button">
+        <input type="submit" value="Оплатить" />
+    </div>
+    {if $auto_submit}
+    <i class="icon16 loading"></i>
+    <em>Перенаправление на сайт «МодульБанка» для оплаты...</em>
+    <br /><br />
+    <script type="text/javascript">
+    setTimeout(function () {
+        document.getElementById('paymentForm').submit();
+    }, 3000);
+    </script>
+{/if}
+
+</form>
+
