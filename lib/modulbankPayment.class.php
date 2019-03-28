@@ -121,7 +121,27 @@ class modulbankPayment extends waPayment implements waIPayment
 
     public function refund($transaction_raw_data)
     {
-        $result = $this->restRefund($transaction_raw_data);
+        $result = ['result' => 1, 'description' => 'Ошибка выполнения запроса возврата'];
+        $key = $this->mode == 'test' ?
+            $this->test_secret_key :
+            $this->secret_key;
+        $merchant = $this->merchant;
+        $amount = number_format($transaction_raw_data['transaction']['amount'], 2, '','.');
+        $transaction_id = $transaction_raw_data['transaction']['native_id'];
+        $this->logger(['merchant' => $merchant, 'amount' => $amount, 'transaction' => $transaction_id], 'refund');
+        $response = ModulbankHelper::refund($merchant, $amount, $transaction_id, $key);
+        $this->logger($response, 'refundResponse');
+        $response = json_decode($response);
+        if ($response && $response->status === 'ok') {
+            if (in_array($response->refund->state, array('PENDING', 'PROCESSING', 'WAITING_FOR_RESULT', 'COMPLETE'))){
+                $result = ['result' => 0, 'description' => $response->message ];
+            } else {
+                $result = ['result' => 1, 'description' => $response->message ];
+            }
+        }
+        if ($response && $response->status === 'error') {
+            $result = ['result' => 1, 'description' => $response->message ];
+        }
         return $result;
     }
 
@@ -196,7 +216,7 @@ class modulbankPayment extends waPayment implements waIPayment
 
     private function getTransactionStatus($request)
     {
-        return 'ghgfjhfhg';
+        return false;
     }
 
 
