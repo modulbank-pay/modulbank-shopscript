@@ -242,7 +242,7 @@ class modulbankPayment extends waPayment implements waIPayment
     private function getTaxId($item)
     {
         if (!isset($item['tax_rate'])) {
-            $tax = '1'; //без НДС;
+            $tax = 'none'; //без НДС;
         } else {
             $tax_included = (!isset($item['tax_included']) || !empty($item['tax_included']));
             $rate = ifset($item['tax_rate']);
