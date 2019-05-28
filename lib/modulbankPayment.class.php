@@ -104,7 +104,7 @@ class modulbankPayment extends waPayment implements waIPayment
                     $item['tax_included'] = $order->shipping_tax_included;
                 }
                 $taxId = $this->getTaxId($item);
-                $receipt->addItem($order->shipping_name, $order->shipping, $item['amount'], $order->shipping_tax_rate, $this->payment_object_delivery);
+                $receipt->addItem($order->shipping_name, $order->shipping, $taxId, $this->payment_object_delivery);
             }
             return $receipt->getJson();
 
