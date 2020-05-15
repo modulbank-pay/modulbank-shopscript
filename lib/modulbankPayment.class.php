@@ -126,7 +126,7 @@ class modulbankPayment extends waPayment implements waIPayment
             $this->test_secret_key :
             $this->secret_key;
         $merchant = $this->merchant;
-        $amount = number_format($transaction_raw_data['transaction']['amount'], 2, '','.');
+        $amount = number_format($transaction_raw_data['transaction']['amount'], 2, '.','');
         $transaction_id = $transaction_raw_data['transaction']['native_id'];
         $this->logger(['merchant' => $merchant, 'amount' => $amount, 'transaction' => $transaction_id], 'refund');
         $response = ModulbankHelper::refund($merchant, $amount, $transaction_id, $key);
@@ -229,9 +229,15 @@ class modulbankPayment extends waPayment implements waIPayment
         $transaction_data = parent::formalizeData(null);
         $transaction_data['native_id'] = $result['transaction_id'];
         $transaction_data['order_id'] = $this->order_id;
-        $transaction_data['amount'] = $result['amount'];
-        $transaction_data['currency_id'] = $result['currency'];
-        $transaction_data['view_data'] = 'Pan: '.$result['pan_mask'];
+        if (isset($result['amount'])) {
+            $transaction_data['amount'] = $result['amount'];
+        }
+        if (isset($result['currency'])) {
+            $transaction_data['currency_id'] = $result['currency'];
+        }
+        if (isset($result['pan_mask'])) {
+            $transaction_data['view_data'] = 'Pan: '.$result['pan_mask'];
+        }
 
         return $transaction_data;
     }
