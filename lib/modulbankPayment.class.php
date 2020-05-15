@@ -55,7 +55,7 @@ class modulbankPayment extends waPayment implements waIPayment
             'order_id'        => $order_data['id_str'],
             'testing'         => $this->mode == 'test' ? 1 : 0,
             'description'     => 'Оплата заказа ' . $order_data['id_str'],
-            'success_url'     => $this->success_url,
+            'success_url'     => $this->success_url.'&order_id='.$order_data['order_id'],
             'fail_url'        => $this->fail_url,
             'cancel_url'      => $this->cancel_url,
             'callback_url'    => $this->getRelayUrl().'?transaction_result=result&app_id='.$this->app_id.'&client_id='.$this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
@@ -229,6 +229,9 @@ class modulbankPayment extends waPayment implements waIPayment
         $transaction_data = parent::formalizeData(null);
         $transaction_data['native_id'] = $result['transaction_id'];
         $transaction_data['order_id'] = $this->order_id;
+        if(empty($transaction_data['order_id']) && isset($result['order_id'])) {
+            $transaction_data['order_id'] = $result['order_id'];
+        }
         if (isset($result['amount'])) {
             $transaction_data['amount'] = $result['amount'];
         }
