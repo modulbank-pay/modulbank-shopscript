@@ -5,7 +5,7 @@ return array(
     'icon'        => 'img/modulbank16.png',
     'logo'        => 'img/modulbank.png',
     'vendor'      => '1200271',
-    'version'     => '1.2.0',
+    'version'     => '1.2.1',
     'locale'      => array('ru_RU',),
     'type'        => waPayment::TYPE_ONLINE,
 );
