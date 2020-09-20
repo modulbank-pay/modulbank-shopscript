@@ -60,6 +60,17 @@ return array(
             'prod'   => 'Рабочий'
             )
         ),
+    'preauth'   => array(
+        'value'         => '0',
+        'placeholder'   =>  '',
+        'title'         => 'Предавторизация',
+        'description'   => '',
+        'control_type'  => waHtmlControl::SELECT,
+        'options'       => array(
+            '0'   => 'Нет',
+            '1'   => 'Да'
+            )
+        ),
     'sno'   => array(
         'value'         => 'usn',
         'placeholder'   =>  '',

@@ -13,15 +13,14 @@
  * @property-read string $customer_phone
  *
  */
-include_once __DIR__.'/modulbanklib/ModulbankHelper.php';
-include_once __DIR__.'/modulbanklib/ModulbankReceipt.php';
+include_once __DIR__ . '/modulbanklib/ModulbankHelper.php';
+include_once __DIR__ . '/modulbanklib/ModulbankReceipt.php';
 
-class modulbankPayment extends waPayment implements waIPayment
+class modulbankPayment extends waPayment implements waIPayment, waIPaymentCapture, waIPaymentCancel, waIPaymentRefund
 {
     private $order_id;
 
     private static $url = 'https://pay.modulbank.ru/pay';
-
 
     public function allowedCurrency()
     {
@@ -30,15 +29,13 @@ class modulbankPayment extends waPayment implements waIPayment
 
     public function payment($payment_form_data, $order_data, $auto_submit = false)
     {
-        $order = waOrder::factory($order_data);
+        $order            = waOrder::factory($order_data);
         $allowed_currency = $this->allowedCurrency();
         if (!in_array($order->currency, $allowed_currency)) {
             throw new waException(sprintf('Unsupported currency %s', $order->currency));
         }
 
         $amount = number_format($order->total, 2, '.', '');
-
-
 
         $sysinfo = [
             'language' => 'PHP ' . phpversion(),
@@ -47,18 +44,19 @@ class modulbankPayment extends waPayment implements waIPayment
         ];
         $c = new waContact($order_data['customer_contact_id']);
 
-        $email = $c->get('email', 'default');
-        $name = $c->get('firstname', 'default').' '.$c->get('lastname', 'default');
+        $email       = $c->get('email', 'default');
+        $name        = $c->get('firstname', 'default') . ' ' . $c->get('lastname', 'default');
         $form_fields = array(
             'merchant'        => $this->merchant,
             'amount'          => $amount,
             'order_id'        => $order_data['id_str'],
             'testing'         => $this->mode == 'test' ? 1 : 0,
+            'preauth'         => $this->preauth,
             'description'     => 'Оплата заказа ' . $order_data['id_str'],
-            'success_url'     => $this->success_url.'&client_id='.$this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
-            'fail_url'        => $this->fail_url.'&client_id='.$this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
-            'cancel_url'      => $this->cancel_url.'?client_id='.$this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
-            'callback_url'    => $this->getRelayUrl().'?transaction_result=result&app_id='.$this->app_id.'&client_id='.$this->app_id.'_'.$this->merchant_id.'_'.$order_data['order_id'],
+            'success_url'     => $this->success_url . '&client_id=' . $this->app_id . '_' . $this->merchant_id . '_' . $order_data['order_id'],
+            'fail_url'        => $this->fail_url . '&client_id=' . $this->app_id . '_' . $this->merchant_id . '_' . $order_data['order_id'],
+            'cancel_url'      => $this->cancel_url . '?client_id=' . $this->app_id . '_' . $this->merchant_id . '_' . $order_data['order_id'],
+            'callback_url'    => $this->getRelayUrl() . '?transaction_result=result&app_id=' . $this->app_id . '&client_id=' . $this->app_id . '_' . $this->merchant_id . '_' . $order_data['order_id'],
             'client_name'     => $name,
             'client_email'    => $email,
             'receipt_contact' => $email,
@@ -69,52 +67,55 @@ class modulbankPayment extends waPayment implements waIPayment
         );
 
         $key = $this->mode == 'test' ?
-            $this->test_secret_key :
-            $this->secret_key;
+        $this->test_secret_key :
+        $this->secret_key;
 
-        $signature                 = ModulbankHelper::calcSignature($key, $form_fields);
+        $signature                = ModulbankHelper::calcSignature($key, $form_fields);
         $form_fields['signature'] = $signature;
 
-        $view = wa()->getView();
+        $view     = wa()->getView();
         $form_url = self::$url;
         $this->logger($order->items, 'orderItems');
         $this->logger($form_fields, 'paymentForm');
         $view->assign(compact('form_fields', 'form_url', 'auto_submit'));
 
-        return $view->fetch($this->path.'/templates/payment.html');
+        return $view->fetch($this->path . '/templates/payment.html');
     }
 
     private function getReceiptData(waOrder $order)
     {
         $receipt = new ModulbankReceipt($this->sno, $this->payment_method, $order->total);
 
-            foreach ($order->items as $item) {
-                $item['amount'] = $item['price'] - ifset($item['discount'], 0.0);
-                $taxId = $this->getTaxId($item);
-                $receipt->addItem($item['name'], $item['amount'], $taxId, $this->payment_object, $item['quantity']);
-            }
+        foreach ($order->items as $item) {
+            if ($item['quantity'] == 0) continue;
+            $item['amount'] = $item['price'] - ifset($item['discount'], 0.0);
+            $taxId          = $this->getTaxId($item);
+            $receipt->addItem($item['name'], $item['amount'], $taxId, $this->payment_object, $item['quantity']);
+        }
 
-            #shipping
-            if (strlen($order->shipping_name) || $order->shipping) {
+        #shipping
+        if (strlen($order->shipping_name) || $order->shipping) {
 
-                $item = array(
-                    'tax_rate' => $order->shipping_tax_rate,
-                );
-                if ($order->shipping_tax_included !== null) {
-                    $item['tax_included'] = $order->shipping_tax_included;
-                }
-                $taxId = $this->getTaxId($item);
-                $receipt->addItem($order->shipping_name, $order->shipping, $taxId, $this->payment_object_delivery);
+            $item = array(
+                'tax_rate' => $order->shipping_tax_rate,
+            );
+            if ($order->shipping_tax_included !== null) {
+                $item['tax_included'] = $order->shipping_tax_included;
             }
-            return $receipt->getJson();
+            $taxId = $this->getTaxId($item);
+            $receipt->addItem($order->shipping_name, $order->shipping, $taxId, $this->payment_object_delivery);
+        }
+        return $receipt->getJson();
 
     }
 
-    private function getVersion() {
+    private function getVersion()
+    {
         return $this->properties['version'];
     }
 
-    private function getCmsVersion() {
+    private function getCmsVersion()
+    {
         $prop = wa()->getAppInfo('shop');
         return $prop['version'];
     }
@@ -122,40 +123,101 @@ class modulbankPayment extends waPayment implements waIPayment
     public function refund($transaction_raw_data)
     {
         $result = ['result' => 1, 'description' => 'Ошибка выполнения запроса возврата'];
-        $key = $this->mode == 'test' ?
-            $this->test_secret_key :
-            $this->secret_key;
-        $merchant = $this->merchant;
-        $amount = number_format($transaction_raw_data['transaction']['amount'], 2, '.','');
+        $key    = $this->mode == 'test' ?
+        $this->test_secret_key :
+        $this->secret_key;
+        $merchant       = $this->merchant;
+        $amount         = number_format($transaction_raw_data['transaction']['amount'], 2, '.', '');
         $transaction_id = $transaction_raw_data['transaction']['native_id'];
         $this->logger(['merchant' => $merchant, 'amount' => $amount, 'transaction' => $transaction_id], 'refund');
         $response = ModulbankHelper::refund($merchant, $amount, $transaction_id, $key);
         $this->logger($response, 'refundResponse');
         $response = json_decode($response);
         if ($response && $response->status === 'ok') {
-            if (in_array($response->refund->state, array('PENDING', 'PROCESSING', 'WAITING_FOR_RESULT', 'COMPLETE'))){
-                $result = ['result' => 0, 'description' => $response->message ];
+            if (in_array($response->refund->state, array('PENDING', 'PROCESSING', 'WAITING_FOR_RESULT', 'COMPLETE'))) {
+                $result = ['result' => 0, 'description' => $response->message];
             } else {
-                $result = ['result' => 1, 'description' => $response->message ];
+                $result = ['result' => 1, 'description' => $response->message];
             }
         }
         if ($response && $response->status === 'error') {
-            $result = ['result' => 1, 'description' => $response->message ];
+            $result = ['result' => 1, 'description' => $response->message];
         }
         return $result;
     }
 
+    /**
+     * @param $data
+     * @return array
+     * @throws waPaymentException
+     * @throws waException
+     */
+    public function cancel($transaction_raw_data)
+    {
+        return $this->refund($transaction_raw_data);
+    }
+
+    /**
+     * @param $data
+     * @return array
+     * @throws waPaymentException
+     * @throws waException
+     */
+    public function capture($transaction_raw_data)
+    {
+        $key = $this->mode == 'test' ?
+        $this->test_secret_key :
+        $this->secret_key;
+        $merchant       = $this->merchant;
+        $transaction_id = $transaction_raw_data['transaction']['native_id'];
+        $order_data = shopPayment::getOrderData($transaction_raw_data['transaction']['order_id'], $this);
+        $order = waOrder::factory($order_data);
+        $amount = number_format($order->total, 2, '.', '');
+
+        $c = new waContact($order_data['customer_contact_id']);
+
+        $email = $c->get('email', 'default');
+
+        $data = [
+            'merchant'        => $this->merchant,
+            'amount'          => $amount,
+            'transaction'     => $transaction_id,
+            'receipt_contact' => $email,
+            'receipt_items'   => $this->getReceiptData($order),
+            'unix_timestamp'  => time(),
+            'salt'            => ModulbankHelper::getSalt(),
+        ];
+        $this->logger($data, 'capture');
+
+        $response = ModulbankHelper::capture($data, $key);
+        $this->logger($response, 'captureResponse');
+        $response = json_decode($response);
+        if (!$response) {
+            return $result = ['result' => 1, 'description' => 'Не получен ответ от банка'];
+        }
+        if ($response->status === 'ok') {
+            if (in_array($response->transaction->state, array('PENDING', 'PROCESSING', 'WAITING_FOR_RESULT', 'COMPLETE'))) {
+                $result = ['result' => 0, 'description' => $response->message];
+            } else {
+                $result = ['result' => 1, 'description' => $response->message];
+            }
+        }
+        if ($response->status === 'error') {
+            $result = ['result' => 1, 'description' => $response->message];
+        }
+        return $result;
+    }
 
     protected function callbackInit($request)
     {
-        if(wa()->getUser()->isAdmin() && $request['transaction_result'] === 'download_modulbank_logs') {
+        if (wa()->getUser()->isAdmin() && $request['transaction_result'] === 'download_modulbank_logs') {
             ModulbankHelper::sendPackedLogs($this->getLogsPath());
         }
         $pattern = "@^([a-z]+)_(\\d+)_(.+)$@";
         if (!empty($request['client_id']) && preg_match($pattern, $request['client_id'], $match)) {
-            $this->app_id = $match[1];
+            $this->app_id      = $match[1];
             $this->merchant_id = $match[2];
-            $this->order_id = $match[3];
+            $this->order_id    = $match[3];
         }
         return parent::callbackInit($request);
     }
@@ -168,17 +230,22 @@ class modulbankPayment extends waPayment implements waIPayment
     protected function callbackHandler($request)
     {
         $this->logger($request, 'callback');
-        $transaction_data = $this->formalizeData($request);
+        $transaction_data   = $this->formalizeData($request);
         $transaction_result = ifempty($request['transaction_result'], 'success');
-        $url = null;
+        $url                = null;
         $app_payment_method = null;
         switch ($transaction_result) {
             case 'result':
-                if($this->checkSign()){
-                    if($request['state'] === 'COMPLETE'){
-                        $app_payment_method = self::CALLBACK_PAYMENT;
+                if ($this->checkSign()) {
+                    if ($request['state'] === 'COMPLETE') {
+                        $app_payment_method        = self::CALLBACK_PAYMENT;
                         $transaction_data['state'] = self::STATE_CAPTURED;
-                        $transaction_data['type'] = self::OPERATION_AUTH_CAPTURE;
+                        $transaction_data['type']  = self::OPERATION_AUTH_CAPTURE;
+                    }
+                    if ($request['state'] === 'AUTHORIZED') {
+                        $app_payment_method = self::CALLBACK_AUTH;
+                        $transaction_data['state'] = self::STATE_AUTH;
+                        $transaction_data['type']  = self::OPERATION_AUTH_ONLY;
                     }
                 } else {
                     throw new waException('sign error');
@@ -189,7 +256,7 @@ class modulbankPayment extends waPayment implements waIPayment
                 break;
             case 'failure':
                 if ($this->order_id && $this->app_id) {
-                    $app_payment_method = self::CALLBACK_CANCEL;
+                    $app_payment_method        = self::CALLBACK_CANCEL;
                     $transaction_data['state'] = self::STATE_CANCELED;
                 }
                 $url = $this->getAdapter()->getBackUrl(waAppPayment::URL_FAIL, $transaction_data);
@@ -219,17 +286,16 @@ class modulbankPayment extends waPayment implements waIPayment
         return false;
     }
 
-
     /**
      * @param array|checkBillResponse $result
      * @return array
      */
     protected function formalizeData($result)
     {
-        $transaction_data = parent::formalizeData(null);
+        $transaction_data              = parent::formalizeData(null);
         $transaction_data['native_id'] = $result['transaction_id'];
-        $transaction_data['order_id'] = $this->order_id;
-        if(empty($transaction_data['order_id']) && isset($result['order_id'])) {
+        $transaction_data['order_id']  = $this->order_id;
+        if (empty($transaction_data['order_id']) && isset($result['order_id'])) {
             $transaction_data['order_id'] = $result['order_id'];
         }
         if (isset($result['amount'])) {
@@ -239,14 +305,11 @@ class modulbankPayment extends waPayment implements waIPayment
             $transaction_data['currency_id'] = $result['currency'];
         }
         if (isset($result['pan_mask'])) {
-            $transaction_data['view_data'] = 'Pan: '.$result['pan_mask'];
+            $transaction_data['view_data'] = 'Pan: ' . $result['pan_mask'];
         }
 
         return $transaction_data;
     }
-
-
-
 
     private function getTaxId($item)
     {
@@ -254,7 +317,7 @@ class modulbankPayment extends waPayment implements waIPayment
             $tax = 'none'; //без НДС;
         } else {
             $tax_included = (!isset($item['tax_included']) || !empty($item['tax_included']));
-            $rate = ifset($item['tax_rate']);
+            $rate         = ifset($item['tax_rate']);
             if (in_array($rate, array(null, false, ''), true)) {
                 $rate = 'none';
             }
@@ -265,35 +328,34 @@ class modulbankPayment extends waPayment implements waIPayment
 
             switch ($rate) {
                 case 0:
-                    $tax = 'vat0';//НДС по ставке 0%;
+                    $tax = 'vat0'; //НДС по ставке 0%;
                     break;
                 case 10:
                     if ($tax_included) {
-                        $tax = 'vat10';//НДС чека по ставке 10%;
+                        $tax = 'vat10'; //НДС чека по ставке 10%;
                     } else {
-                        $tax = 'vat110';// НДС чека по расчетной ставке 10/110;
+                        $tax = 'vat110'; // НДС чека по расчетной ставке 10/110;
                     }
                     break;
                 case 18:
                 case 20:
                     if ($tax_included) {
-                        $tax = 'vat20';//НДС чека по ставке 18%;
+                        $tax = 'vat20'; //НДС чека по ставке 18%;
                     } else {
-                        $tax = 'vat120';// НДС чека по расчетной ставке 18/118.
+                        $tax = 'vat120'; // НДС чека по расчетной ставке 18/118.
                     }
                     break;
                 default:
-                    $tax = 'none';//без НДС;
+                    $tax = 'none'; //без НДС;
                     break;
             }
         }
         return $tax;
     }
 
-
     private function checkSign()
     {
-        $post = waRequest::post();
+        $post      = waRequest::post();
         $key       = $this->mode == 'test' ? $this->test_secret_key : $this->secret_key;
         $signature = ModulbankHelper::calcSignature($key, $post);
         return strcasecmp($signature, $post['signature']) == 0;
@@ -303,17 +365,17 @@ class modulbankPayment extends waPayment implements waIPayment
     {
         $path = waConfig::get('wa_path_log');
         if (!$path) {
-            $path = wa()->getConfig()->getRootPath().DIRECTORY_SEPARATOR.'wa-log';
+            $path = wa()->getConfig()->getRootPath() . DIRECTORY_SEPARATOR . 'wa-log';
         }
-        $path = realpath($path.'/payment');
+        $path = realpath($path . '/payment');
         return $path;
     }
 
     private function logger($data, $category)
     {
         if ($this->logging) {
-            $path = $this->getLogsPath();
-            $filename   = $path . '/modulbank.log';
+            $path     = $this->getLogsPath();
+            $filename = $path . '/modulbank.log';
             ModulbankHelper::log($filename, $data, $category, $this->log_size_limit);
 
         }
@@ -331,6 +393,5 @@ class modulbankPayment extends waPayment implements waIPayment
 
         return $result[$params['step']];
     }
-
 
 }
