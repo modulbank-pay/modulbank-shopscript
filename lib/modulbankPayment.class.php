@@ -27,6 +27,15 @@ class modulbankPayment extends waPayment implements waIPayment, waIPaymentCaptur
         return array('RUB');
     }
 
+    public function getSettingsHTML($params = array())
+    {
+        $html = parent::getSettingsHTML($params);
+
+        $js = file_get_contents($this->path.'/js/settings.js');
+        $html .= sprintf('<script type="text/javascript">%s</script>', $js);
+        return $html;
+    }
+
     public function payment($payment_form_data, $order_data, $auto_submit = false)
     {
         $order            = waOrder::factory($order_data);
@@ -65,6 +74,10 @@ class modulbankPayment extends waPayment implements waIPayment, waIPaymentCaptur
             'sysinfo'         => json_encode($sysinfo),
             'salt'            => ModulbankHelper::getSalt(),
         );
+
+        if($this->pm_checkbox) {
+            $form_fields['show_payment_methods'] = json_encode(array_values($this->show_payment_methods));
+        }
 
         $key = $this->mode == 'test' ?
         $this->test_secret_key :

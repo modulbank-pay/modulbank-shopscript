@@ -71,6 +71,24 @@ return array(
             '1'   => 'Да'
             )
         ),
+    'pm_checkbox'  => array(
+        'value'        => false,
+        'title'        => 'Отображать определённые способы оплаты',
+        'description'  => 'Для отображения отдельных методов оплаты установите галочку и выберите интересующие из списка',
+        'control_type' => waHtmlControl::CHECKBOX,
+    ),
+    'show_payment_methods'         => array(
+        'value'            => array(),
+        'title'            => 'Отображаемые варианты оплаты',
+        'description'      => '',
+        'control_type'     => waHtmlControl::GROUPBOX,
+        'options' => array(
+            'card'      => 'Банковской картой',
+            'sbp'       => 'Система быстрых платежей',
+            'googlepay' => 'GooglePay',
+            'applepay'  => 'ApplePay'
+        ),
+    ),
     'sno'   => array(
         'value'         => 'usn',
         'placeholder'   =>  '',
