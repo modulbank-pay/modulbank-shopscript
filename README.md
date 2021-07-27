@@ -2,7 +2,7 @@
 
 Модуль позволяет принимать платежи банковской картой через Модульбанк.
 
-[Скачать модуль](https://github.com/modulbank-pay/modulbank-shopscript/releases/latest/download/modulbank-shortcode.zip)
+[Скачать модуль](https://github.com/modulbank-pay/modulbank-shopscript/releases/latest/download/webasyst_modulbank.zip)
 
 ### Установка
 1. Скопируйте каталог modulbank из архива в каталог `wa-plugins/payment`. Создайте его, если он отстутсвует.
